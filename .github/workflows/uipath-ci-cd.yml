@@ -1,0 +1,41 @@
+name: UiPath REFramework CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ] # Triggers the pipeline every time you push code to the main branch
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest # Using a Windows runner since it includes native .NET environments
+
+    steps:
+    # 1. Pull the source code from your GitHub repository into the cloud machine
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # 2. Set up Node.js to install the modern UiPath global CLI tool
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    # 3. Globally install the UiPath CLI tool (uip) via npm
+    - name: Install UiPath CLI
+      run: npm install -g @uipath/cli
+
+    # 4. Restore NuGet packages and dependencies for the project
+    - name: Restore Project Dependencies
+      run: uip rpa-legacy restore .\project.json
+
+    # 5. Run static code analysis and validation to ensure there are no errors
+    - name: Validate UiPath Code Architecture
+      run: uip rpa-legacy validate .\project.json
+
+    # 6. Compile the project files into a deployable NuGet package (.nupkg)
+    - name: Pack Automation Project
+      run: uip rpa-legacy pack . --output "artifacts/"
+
+    # 7. Upload the compiled package directly into your UiPath Orchestrator Folder
+    - name: Deploy Package to Orchestrator
+      run: |
+        uip orchestrator deploy --package-path "artifacts/" --orchestrator-url "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" --organization "${{ secrets.UIPATH_ORGANIZATION }}" --tenant "${{ secrets.UIPATH_TENANT }}" --client-id "${{ secrets.UIPATH_CLIENT_ID }}" --client-secret "${{ secrets.UIPATH_CLIENT_SECRET }}" --folder-name "Shared"

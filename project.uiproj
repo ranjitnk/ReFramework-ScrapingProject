@@ -1,0 +1,6 @@
+{
+  "Name": "REFramework Scraping with Queue",
+  "ProjectType": "Process",
+  "Description": "Robotic Enterprise Framework",
+  "MainFile": "Main.xaml"
+}
