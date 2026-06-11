@@ -39,7 +39,7 @@ jobs:
       run: uip rpa build .
 
     - name: Pack Automation Project
-      run: uip rpa pack . --output "artifacts/"
+      run: uip rpa pack . -o "artifacts/"
 
     - name: Deploy Package to Orchestrator
       run: uip orchestrator deploy --package-path "artifacts/" --folder-name "Shared"
