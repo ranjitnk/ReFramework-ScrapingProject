@@ -23,10 +23,6 @@ jobs:
     - name: Install UiPath CLI
       run: npm install -g @uipath/cli
 
-    # 4. Restore NuGet packages and dependencies for the project
-    - name: Restore Project Dependencies
-      run: uip rpa-legacy restore .\project.json
-
     # 5. Run static code analysis and validation to ensure there are no errors
     - name: Validate UiPath Code Architecture
       run: uip rpa-legacy validate .\project.json
