@@ -11,7 +11,6 @@ jobs:
   build-and-deploy:
     runs-on: windows-latest
     
-    # SINGLE SECTION: Defining variables here shares them with ALL steps below automatically
     env:
       UIPATH_ORCHESTRATOR_URL: ${{ secrets.UIPATH_ORCHESTRATOR_URL }}
       UIPATH_ORGANIZATION: ${{ secrets.UIPATH_ORGANIZATION }}
@@ -31,11 +30,26 @@ jobs:
     - name: Install UiPath CLI
       run: npm install -g @uipath/cli
 
+    # Added target-framework flag to resolve basic .NET data types
     - name: Validate UiPath Code Architecture
-      run: uip rpa-legacy validate .\project.json
+      run: >
+        uip rpa-legacy validate .\project.json 
+        --target-framework "Windows"
+        --orchestrator-url "$env:UIPATH_ORCHESTRATOR_URL" 
+        --organization "$env:UIPATH_ORGANIZATION" 
+        --tenant "$env:UIPATH_TENANT" 
+        --client-id "$env:UIPATH_CLIENT_ID" 
+        --client-secret "$env:UIPATH_CLIENT_SECRET"
 
+    # Added target-framework flag here as well to ensure a clean compilation
     - name: Pack Automation Project
-      run: uip rpa-legacy pack . --output "artifacts/"
+      run: uip rpa-legacy pack . --target-framework "Windows" --output "artifacts/"
 
     - name: Deploy Package to Orchestrator
-      run: uip orchestrator deploy --package-path "artifacts/" --folder-name "Shared"
+      run: >
+        uip orchestrator deploy --package-path "artifacts/" --folder-name "Shared" 
+        --orchestrator-url "$env:UIPATH_ORCHESTRATOR_URL" 
+        --organization "$env:UIPATH_ORGANIZATION" 
+        --tenant "$env:UIPATH_TENANT" 
+        --client-id "$env:UIPATH_CLIENT_ID" 
+        --client-secret "$env:UIPATH_CLIENT_SECRET"
