@@ -38,8 +38,9 @@ jobs:
     - name: Validate UiPath Code Architecture
       run: uip rpa build .
 
+    # Swapped --output to the correct --output-directory flag
     - name: Pack Automation Project
-      run: uip rpa pack --output "artifacts/" .
+      run: uip rpa-legacy pack . --output-directory "artifacts/"
 
     - name: Deploy Package to Orchestrator
       run: uip orchestrator deploy --package-path "artifacts/" --folder-name "Shared"
