@@ -4,13 +4,20 @@ on:
   push:
     branches: [ "main" ]
 
-# This fixes the Node.js warning by forcing the runner to use Node 24 structures natively
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   build-and-deploy:
     runs-on: windows-latest
+    
+    # SINGLE SECTION: Defining variables here shares them with ALL steps below automatically
+    env:
+      UIPATH_ORCHESTRATOR_URL: ${{ secrets.UIPATH_ORCHESTRATOR_URL }}
+      UIPATH_ORGANIZATION: ${{ secrets.UIPATH_ORGANIZATION }}
+      UIPATH_TENANT: ${{ secrets.UIPATH_TENANT }}
+      UIPATH_CLIENT_ID: ${{ secrets.UIPATH_CLIENT_ID }}
+      UIPATH_CLIENT_SECRET: ${{ secrets.UIPATH_CLIENT_SECRET }}
 
     steps:
     - name: Checkout Code
@@ -19,19 +26,16 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '24' # Upgraded to 24 to align with GitHub guidelines
+        node-version: '24'
 
     - name: Install UiPath CLI
       run: npm install -g @uipath/cli
 
-    # Passing Orchestrator credentials here ensures validation can pull activity feeds cleanly
     - name: Validate UiPath Code Architecture
-      run: |
-        uip rpa-legacy validate .\project.json --orchestrator-url "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" --organization "${{ secrets.UIPATH_ORGANIZATION }}" --tenant "${{ secrets.UIPATH_TENANT }}" --client-id "${{ secrets.UIPATH_CLIENT_ID }}" --client-secret "${{ secrets.UIPATH_CLIENT_SECRET }}"
+      run: uip rpa-legacy validate .\project.json
 
     - name: Pack Automation Project
       run: uip rpa-legacy pack . --output "artifacts/"
 
     - name: Deploy Package to Orchestrator
-      run: |
-        uip orchestrator deploy --package-path "artifacts/" --orchestrator-url "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" --organization "${{ secrets.UIPATH_ORGANIZATION }}" --tenant "${{ secrets.UIPATH_TENANT }}" --client-id "${{ secrets.UIPATH_CLIENT_ID }}" --client-secret "${{ secrets.UIPATH_CLIENT_SECRET }}" --folder-name "Shared"
+      run: uip orchestrator deploy --package-path "artifacts/" --folder-name "Shared"
