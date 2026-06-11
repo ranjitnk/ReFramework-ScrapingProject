@@ -29,6 +29,9 @@ jobs:
 
     - name: Install UiPath CLI
       run: npm install -g @uipath/cli
+    
+    - name: Restore Project Dependencies
+      run: uip rpa restore .\project.json
 
     # Added target-framework flag to resolve basic .NET data types
     - name: Validate UiPath Code Architecture
