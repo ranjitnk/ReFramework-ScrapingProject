@@ -4,6 +4,10 @@ on:
   push:
     branches: [ "main" ] # Triggers the pipeline every time you push code to the main branch
 
+# Fixes for Node.js warning
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   build-and-deploy:
     runs-on: windows-latest # Using a Windows runner since it includes native .NET environments
@@ -17,7 +21,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '24'
 
     # 3. Globally install the UiPath CLI tool (uip) via npm
     - name: Install UiPath CLI
