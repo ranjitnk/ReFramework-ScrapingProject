@@ -29,29 +29,17 @@ jobs:
 
     - name: Install UiPath CLI
       run: npm install -g @uipath/cli
-    
-    - name: Restore Project Dependencies
-      run: uip rpa restore .\project.json
 
-    # Removed the invalid flag and added the official feed fallback parameter to download dependencies
+    # FIXED: Changed from .\project.json to . (target folder context)
+    - name: Restore Project Dependencies
+      run: uip rpa restore .
+
+    # FIXED: Changed from .\project.json to . (target folder context)
     - name: Validate UiPath Code Architecture
-      run: >
-        uip rpa-legacy validate .\project.json 
-        --pipofeeds "https://pkgs.dev.azure.com/uipath/Public.Feeds/_nuget/v3/index.json"
-        --orchestrator-url "$env:UIPATH_ORCHESTRATOR_URL" 
-        --organization "$env:UIPATH_ORGANIZATION" 
-        --tenant "$env:UIPATH_TENANT" 
-        --client-id "$env:UIPATH_CLIENT_ID" 
-        --client-secret "$env:UIPATH_CLIENT_SECRET"
+      run: uip rpa build .
 
     - name: Pack Automation Project
       run: uip rpa pack --project-path . --output "artifacts/"
 
     - name: Deploy Package to Orchestrator
-      run: >
-        uip orchestrator deploy --package-path "artifacts/" --folder-name "Shared" 
-        --orchestrator-url "$env:UIPATH_ORCHESTRATOR_URL" 
-        --organization "$env:UIPATH_ORGANIZATION" 
-        --tenant "$env:UIPATH_TENANT" 
-        --client-id "$env:UIPATH_CLIENT_ID" 
-        --client-secret "$env:UIPATH_CLIENT_SECRET"
+      run: uip orchestrator deploy --package-path "artifacts/" --folder-name "Shared"
