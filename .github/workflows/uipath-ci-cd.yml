@@ -30,20 +30,19 @@ jobs:
     - name: Install UiPath CLI
       run: npm install -g @uipath/cli
 
-    # Added target-framework flag to resolve basic .NET data types
+    # Removed the invalid flag and added the official feed fallback parameter to download dependencies
     - name: Validate UiPath Code Architecture
       run: >
         uip rpa-legacy validate .\project.json 
-        --target-framework "Windows"
+        --pipofeeds "https://pkgs.dev.azure.com/uipath/Public.Feeds/_nuget/v3/index.json"
         --orchestrator-url "$env:UIPATH_ORCHESTRATOR_URL" 
         --organization "$env:UIPATH_ORGANIZATION" 
         --tenant "$env:UIPATH_TENANT" 
         --client-id "$env:UIPATH_CLIENT_ID" 
         --client-secret "$env:UIPATH_CLIENT_SECRET"
 
-    # Added target-framework flag here as well to ensure a clean compilation
     - name: Pack Automation Project
-      run: uip rpa-legacy pack . --target-framework "Windows" --output "artifacts/"
+      run: uip rpa-legacy pack . --output "artifacts/"
 
     - name: Deploy Package to Orchestrator
       run: >
