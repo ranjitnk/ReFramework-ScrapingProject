@@ -24,7 +24,7 @@ jobs:
           Write-Error "project.json not found at ${{ env.PROJECT_PATH }}"
           exit 1
         }
-        Write-Host "✓ Project file found: ${{ env.PROJECT_PATH }}"
+        Write-Host "[OK] Project file found: ${{ env.PROJECT_PATH }}"
 
     - name: Find UiPath Command Line Tools
       shell: powershell
@@ -33,11 +33,11 @@ jobs:
         
         # Check if Studio is installed
         if (Test-Path "${{ env.UIPATH_STUDIO_PATH }}") {
-          Write-Host "✓ UiPath Studio found at ${{ env.UIPATH_STUDIO_PATH }}"
+          Write-Host "[OK] UiPath Studio found at ${{ env.UIPATH_STUDIO_PATH }}"
           $env:PATH = "${{ env.UIPATH_STUDIO_PATH }};$env:PATH"
           Write-Host "Added to PATH: ${{ env.UIPATH_STUDIO_PATH }}"
         } else {
-          Write-Host "⚠ UiPath Studio not found at default location"
+          Write-Host "[WARN] UiPath Studio not found at default location"
           Write-Host "Checking Program Files for UiPath installations..."
           $studioPath = Get-ChildItem -Path "C:\Program Files" -Filter "UiPath" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($studioPath) {
@@ -51,9 +51,9 @@ jobs:
         $found = Get-Command $cliExe -ErrorAction SilentlyContinue
         
         if ($found) {
-          Write-Host "✓ Found $cliExe at: $($found.Source)"
+          Write-Host "[OK] Found $cliExe at: $($found.Source)"
         } else {
-          Write-Host "⚠ UiPath Studio CLI not found in PATH"
+          Write-Host "[WARN] UiPath Studio CLI not found in PATH"
           Write-Host "INFO: Make sure UiPath Studio is installed with CLI tools enabled"
         }
 
@@ -62,9 +62,9 @@ jobs:
       run: |
         if (-Not (Test-Path "${{ env.ARTIFACT_DIR }}")) {
           New-Item -ItemType Directory -Path "${{ env.ARTIFACT_DIR }}" -Force | Out-Null
-          Write-Host "✓ Created artifact directory: ${{ env.ARTIFACT_DIR }}"
+          Write-Host "[OK] Created artifact directory: ${{ env.ARTIFACT_DIR }}"
         } else {
-          Write-Host "✓ Artifact directory exists"
+          Write-Host "[OK] Artifact directory exists"
         }
 
     - name: Validate Project
@@ -74,9 +74,9 @@ jobs:
         
         try {
           UiPath.Studio.CommandLine.exe analyze --project-path "${{ env.PROJECT_PATH }}" --treat-warnings-as-errors false
-          Write-Host "✓ Project validation passed"
+          Write-Host "[OK] Project validation passed"
         } catch {
-          Write-Host "⚠ Validation tool may not be available, continuing..."
+          Write-Host "[WARN] Validation tool may not be available, continuing..."
         }
 
     - name: Pack Automation Project
@@ -88,7 +88,7 @@ jobs:
           UiPath.Studio.CommandLine.exe pack "${{ env.PROJECT_PATH }}" -o "${{ env.ARTIFACT_DIR }}" 2>&1
           
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓ Package created successfully"
+            Write-Host "[OK] Package created successfully"
             Get-ChildItem "${{ env.ARTIFACT_DIR }}" -Filter "*.nupkg" | ForEach-Object { 
               Write-Host "Generated package: $($_.Name) ($('{0:N2}' -f ($_.Length / 1MB)) MB)"
             }
@@ -125,7 +125,7 @@ jobs:
             --client-secret "${{ secrets.UIPATH_CLIENT_SECRET }}"
           
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓ Deployment completed successfully"
+            Write-Host "[OK] Deployment completed successfully"
           } else {
             Write-Error "Deployment failed with exit code $LASTEXITCODE"
             exit 1
