@@ -2,22 +2,14 @@ name: UiPath REFramework CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main" ]
-
-env:
-  ARTIFACT_DIR: ./artifacts
-  PROJECT_PATH: ./project.json
-  UIPATH_STUDIO_PATH: "C:\\Program Files\\UiPath\\Studio"
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
-    # STEP 1: Set up self-hosted runner first!
-    # 1. Run: powershell -ExecutionPolicy Bypass -File setup-github-runner.ps1
-    # 2. Then uncomment the line below:
-    # runs-on: self-hosted
-    
-    # For now, using windows-latest which will show setup instructions:
-    runs-on: windows-latest
+    runs-on: self-hosted
 
     steps:
     - name: Checkout Code
@@ -27,150 +19,77 @@ jobs:
       shell: powershell
       run: |
         Write-Host "Checking for UiPath Studio..."
+        $paths = @(
+          "${env:ProgramFiles}\UiPath\Studio\UiPath.Studio.CommandLine.exe",
+          "${env:ProgramFiles(x86)}\UiPath\Studio\UiPath.Studio.CommandLine.exe",
+          "${env:LocalAppData}\Programs\UiPath\Studio\UiPath.Studio.CommandLine.exe"
+        )
         
-        if (Test-Path "${{ env.UIPATH_STUDIO_PATH }}") {
-          Write-Host "[OK] UiPath Studio found at ${{ env.UIPATH_STUDIO_PATH }}"
-        } else {
-          Write-Host "[ERROR] UiPath Studio not found!"
-          Write-Host ""
-          Write-Host "===== SETUP REQUIRED ====="
-          Write-Host "This workflow requires UiPath Studio to be installed."
-          Write-Host ""
-          Write-Host "Option 1: Use Self-Hosted Runner (Recommended)"
-          Write-Host "1. Install UiPath Studio on a Windows machine"
-          Write-Host "2. Install GitHub Actions Runner: https://github.com/actions/runner/releases"
-          Write-Host "3. Register runner: ./config.cmd --url https://github.com/ranjitnk/ReFramework-ScrapingProject --token YOUR_TOKEN"
-          Write-Host "4. Change workflow: runs-on: self-hosted"
-          Write-Host ""
-          Write-Host "Option 2: Install Studio During Workflow"
-          Write-Host "- Uncomment the 'Install UiPath Studio' step below"
-          Write-Host "- Warning: Adds 20+ minutes to build time"
-          Write-Host ""
-          exit 1
+        $studioFound = $false
+        foreach ($path in $paths) {
+            if (Test-Path $path) {
+                Write-Host "Found UiPath Studio CLI at: $path"
+                $studioFound = $true
+                break
+            }
         }
-
-    - name: Validate Project File
-      shell: powershell
-      run: |
-        if (-Not (Test-Path "${{ env.PROJECT_PATH }}")) {
-          Write-Error "project.json not found at ${{ env.PROJECT_PATH }}"
-          exit 1
+        
+        if (-not $studioFound) {
+            Write-Error "UiPath Studio CommandLine tool not found on this self-hosted runner!"
+            exit 1
         }
-        Write-Host "[OK] Project file found: ${{ env.PROJECT_PATH }}"
 
     - name: Find UiPath Command Line Tools
+      id: find-cli
       shell: powershell
       run: |
-        Write-Host "Searching for UiPath command line tools..."
-        
-        # Check if Studio is installed
-        if (Test-Path "${{ env.UIPATH_STUDIO_PATH }}") {
-          Write-Host "[OK] UiPath Studio found at ${{ env.UIPATH_STUDIO_PATH }}"
-          $env:PATH = "${{ env.UIPATH_STUDIO_PATH }};$env:PATH"
-          Write-Host "Added to PATH: ${{ env.UIPATH_STUDIO_PATH }}"
-        } else {
-          Write-Host "[WARN] UiPath Studio not found at default location"
-          Write-Host "Checking Program Files for UiPath installations..."
-          $studioPath = Get-ChildItem -Path "C:\Program Files" -Filter "UiPath" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($studioPath) {
-            Write-Host "Found: $($studioPath.FullName)"
-            $env:PATH = "$($studioPath.FullName);$env:PATH"
-          }
+        $paths = @(
+          "${env:ProgramFiles}\UiPath\Studio\UiPath.Studio.CommandLine.exe",
+          "${env:ProgramFiles(x86)}\UiPath\Studio\UiPath.Studio.CommandLine.exe",
+          "${env:LocalAppData}\Programs\UiPath\Studio\UiPath.Studio.CommandLine.exe"
+        )
+        foreach ($path in $paths) {
+            if (Test-Path $path) {
+                echo "uipath_cli=$path" >> $env:GITHUB_OUTPUT
+                exit 0
+            }
         }
-        
-        # Try to find the CLI executable
-        $cliExe = "UiPath.Studio.CommandLine.exe"
-        $found = Get-Command $cliExe -ErrorAction SilentlyContinue
-        
-        if ($found) {
-          Write-Host "[OK] Found $cliExe at: $($found.Source)"
-        } else {
-          Write-Host "[WARN] UiPath Studio CLI not found in PATH"
-          Write-Host "INFO: Make sure UiPath Studio is installed with CLI tools enabled"
-        }
+        Write-Error "UiPath CLI tool could not be located."
+        exit 1
 
     - name: Create Artifact Directory
-      shell: powershell
-      run: |
-        if (-Not (Test-Path "${{ env.ARTIFACT_DIR }}")) {
-          New-Item -ItemType Directory -Path "${{ env.ARTIFACT_DIR }}" -Force | Out-Null
-          Write-Host "[OK] Created artifact directory: ${{ env.ARTIFACT_DIR }}"
-        } else {
-          Write-Host "[OK] Artifact directory exists"
-        }
+      run: mkdir -p build/packages
 
-    - name: Validate Project
+    - name: Validate Project (Workflow Analyzer)
       shell: powershell
       run: |
-        Write-Host "Validating project architecture..."
-        
-        try {
-          UiPath.Studio.CommandLine.exe analyze --project-path "${{ env.PROJECT_PATH }}" --treat-warnings-as-errors false
-          Write-Host "[OK] Project validation passed"
-        } catch {
-          Write-Host "[WARN] Validation tool may not be available, continuing..."
-        }
+        $cli = "${{ steps.find-cli.outputs.uipath_cli }}"
+        Write-Host "Running Workflow Analyzer..."
+        & $cli analyze --project-path "project.json"
 
     - name: Pack Automation Project
       shell: powershell
       run: |
-        Write-Host "Packing project as NuGet package..."
-        
-        try {
-          UiPath.Studio.CommandLine.exe pack "${{ env.PROJECT_PATH }}" -o "${{ env.ARTIFACT_DIR }}" 2>&1
-          
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "[OK] Package created successfully"
-            Get-ChildItem "${{ env.ARTIFACT_DIR }}" -Filter "*.nupkg" | ForEach-Object { 
-              Write-Host "Generated package: $($_.Name) ($('{0:N2}' -f ($_.Length / 1MB)) MB)"
-            }
-          } else {
-            Write-Error "Packing failed with exit code $LASTEXITCODE"
-            exit 1
-          }
-        } catch {
-          Write-Error "Error during packing: $_"
-          exit 1
-        }
+        $cli = "${{ steps.find-cli.outputs.uipath_cli }}"
+        Write-Host "Packaging REFramework project..."
+        & $cli pack "project.json" --output "build/packages" --output-kind Project
 
-    - name: Deploy to Orchestrator
-      shell: powershell
-      run: |
-        Write-Host "Preparing deployment to Orchestrator..."
-        
-        $packagePath = Get-ChildItem "${{ env.ARTIFACT_DIR }}" -Filter "*.nupkg" | Select-Object -First 1
-        
-        if (-Not $packagePath) {
-          Write-Error "No package found in ${{ env.ARTIFACT_DIR }}"
-          exit 1
-        }
-        
-        Write-Host "Package to deploy: $($packagePath.Name)"
-        Write-Host "Orchestrator URL: ${{ secrets.UIPATH_ORCHESTRATOR_URL }}"
-        
-        try {
-          UiPath.Studio.CommandLine.exe deploy "$($packagePath.FullName)" `
-            --url "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" `
-            --organization "${{ secrets.UIPATH_ORGANIZATION }}" `
-            --tenant "${{ secrets.UIPATH_TENANT }}" `
-            --client-id "${{ secrets.UIPATH_CLIENT_ID }}" `
-            --client-secret "${{ secrets.UIPATH_CLIENT_SECRET }}"
-          
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "[OK] Deployment completed successfully"
-          } else {
-            Write-Error "Deployment failed with exit code $LASTEXITCODE"
-            exit 1
-          }
-        } catch {
-          Write-Error "Error during deployment: $_"
-          exit 1
-        }
+    # ADDED: Upload step using the official UiPath Deploy Action and your GitHub Secrets
+    - name: Deploy Package to UiPath Orchestrator
+      uses: UiPath/uipath-actions/UipathDeploy@v2
+      with:
+        orchestratorUrl: ${{ secrets.UIPATH_ORCHESTRATOR_URL }}
+        # If using Cloud Orchestrator (User Key/Refresh Token authentication method)
+        userKey: ${{ secrets.UIPATH_USER_KEY }}
+        tenantName: ${{ secrets.UIPATH_TENANT_NAME }}
+        # If using modern external application/OAuth credentials, use these instead:
+        # clientId: ${{ secrets.UIPATH_CLIENT_ID }}
+        # clientSecret: ${{ secrets.UIPATH_CLIENT_SECRET }}
+        folderName: 'Shared' # Change this to your specific Orchestrator Folder name
+        packagePath: 'build/packages'
 
-    - name: Upload Artifacts
-      if: always()
+    - name: Upload Artifacts to GitHub
       uses: actions/upload-artifact@v4
       with:
-        name: uipath-packages
-        path: ${{ env.ARTIFACT_DIR }}
-        retention-days: 30
+        name: uipath-package
+        path: build/packages/
