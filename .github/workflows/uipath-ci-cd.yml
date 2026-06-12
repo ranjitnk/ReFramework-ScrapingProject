@@ -10,17 +10,16 @@ env:
 jobs:
   build-and-deploy:
     runs-on: windows-latest
-    
-    env:
-      UIPATH_ORCHESTRATOR_URL: ${{ secrets.UIPATH_ORCHESTRATOR_URL }}
-      UIPATH_ORGANIZATION: ${{ secrets.UIPATH_ORGANIZATION }}
-      UIPATH_TENANT: ${{ secrets.UIPATH_TENANT }}
-      UIPATH_CLIENT_ID: ${{ secrets.UIPATH_CLIENT_ID }}
-      UIPATH_CLIENT_SECRET: ${{ secrets.UIPATH_CLIENT_SECRET }}
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+
+    # FIX 1: Explicitly install the mandatory compiler framework engine
+    - name: Setup .NET Desktop Runtime 8.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -30,17 +29,22 @@ jobs:
     - name: Install UiPath CLI
       run: npm install -g @uipath/cli
 
-    # FIXED: Changed from .\project.json to . (target folder context)
-    - name: Restore Project Dependencies
-      run: uip rpa restore .
+    # FIX 2: Swapped modern rpa parser to legacy validation parsing engines
+    - name: Validate Legacy UiPath Architecture
+      run: uip rpa-legacy validate . --log-level error
 
-    # FIXED: Changed from .\project.json to . (target folder context)
-    - name: Validate UiPath Code Architecture
-      run: uip rpa build .
+    # FIX 3: Changed flag from --output-directory to the required -o flag
+    - name: Pack Legacy Automation Project
+      run: uip rpa-legacy pack . -o "artifacts/"
 
-    # Swapped --output to the correct --output-directory flag
-    - name: Pack Automation Project
-      run: uip rpa-legacy pack . --output-directory "artifacts/"
-
+    # FIX 4: Explicitly passed repository environment secrets into the deploy task command
     - name: Deploy Package to Orchestrator
-      run: uip orchestrator deploy --package-path "artifacts/" --folder-name "Shared"
+      run: >
+        uip orchestrator deploy 
+        --package-path "artifacts/" 
+        --folder-name "Shared" 
+        --url "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" 
+        --organization "${{ secrets.UIPATH_ORGANIZATION }}" 
+        --tenant "${{ secrets.UIPATH_TENANT }}" 
+        --client-id "${{ secrets.UIPATH_CLIENT_ID }}" 
+        --client-secret "${{ secrets.UIPATH_CLIENT_SECRET }}"
