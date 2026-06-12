@@ -12,10 +12,38 @@ env:
 jobs:
   build-and-deploy:
     runs-on: windows-latest
+    # IMPORTANT: Change 'windows-latest' to 'self-hosted' to use a local runner with UiPath Studio installed
+    # runs-on: self-hosted
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+
+    - name: Check UiPath Studio Installation
+      shell: powershell
+      run: |
+        Write-Host "Checking for UiPath Studio..."
+        
+        if (Test-Path "${{ env.UIPATH_STUDIO_PATH }}") {
+          Write-Host "[OK] UiPath Studio found at ${{ env.UIPATH_STUDIO_PATH }}"
+        } else {
+          Write-Host "[ERROR] UiPath Studio not found!"
+          Write-Host ""
+          Write-Host "===== SETUP REQUIRED ====="
+          Write-Host "This workflow requires UiPath Studio to be installed."
+          Write-Host ""
+          Write-Host "Option 1: Use Self-Hosted Runner (Recommended)"
+          Write-Host "1. Install UiPath Studio on a Windows machine"
+          Write-Host "2. Install GitHub Actions Runner: https://github.com/actions/runner/releases"
+          Write-Host "3. Register runner: ./config.cmd --url https://github.com/ranjitnk/ReFramework-ScrapingProject --token YOUR_TOKEN"
+          Write-Host "4. Change workflow: runs-on: self-hosted"
+          Write-Host ""
+          Write-Host "Option 2: Install Studio During Workflow"
+          Write-Host "- Uncomment the 'Install UiPath Studio' step below"
+          Write-Host "- Warning: Adds 20+ minutes to build time"
+          Write-Host ""
+          exit 1
+        }
 
     - name: Validate Project File
       shell: powershell
