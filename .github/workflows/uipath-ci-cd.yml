@@ -11,9 +11,13 @@ env:
 
 jobs:
   build-and-deploy:
-    runs-on: windows-latest
-    # IMPORTANT: Change 'windows-latest' to 'self-hosted' to use a local runner with UiPath Studio installed
+    # STEP 1: Set up self-hosted runner first!
+    # 1. Run: powershell -ExecutionPolicy Bypass -File setup-github-runner.ps1
+    # 2. Then uncomment the line below:
     # runs-on: self-hosted
+    
+    # For now, using windows-latest which will show setup instructions:
+    runs-on: windows-latest
 
     steps:
     - name: Checkout Code
