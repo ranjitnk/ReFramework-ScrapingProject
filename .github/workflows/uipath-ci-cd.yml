@@ -4,9 +4,6 @@ on:
   push:
     branches: [ "main" ]
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-
 jobs:
   build-and-deploy:
     runs-on: windows-latest
@@ -15,36 +12,33 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # FIX 1: Explicitly install the mandatory compiler framework engine
-    - name: Setup .NET Desktop Runtime 8.0
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
+    # FIX 1: Install the native Windows UiPath Compiler Tools Bundle
+    - name: Install Standalone UiPath CLI Tools
+      shell: powershell
+      run: |
+        Invoke-WebRequest -Uri "https://uipath.com" -OutFile "UiPathStudio.msi"
+        Start-Process msiexec.exe -ArgumentList '/i UiPathStudio.msi /qn ADDLOCAL=DesktopFeature,Robot,Studio,CommandLineCLI' -Wait
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '24'
+    # FIX 2: Explicitly add the installation binaries directory to the pipeline PATH environment
+    - name: Configure Execution Environment PATH
+      shell: powershell
+      run: |
+        echo "C:\Program Files\UiPath\Studio" >> $GITHUB_PATH
 
-    - name: Install UiPath CLI
-      run: npm install -g @uipath/cli
-
-    # FIX 2: Swapped modern rpa parser to legacy validation parsing engines
+    # FIX 3: Execute validation using the native architectural validation binary
     - name: Validate Legacy UiPath Architecture
-      run: uip rpa-legacy validate . --log-level error
+      shell: powershell
+      run: |
+        UiPath.Studio.CommandLineArgs.exe analyze --project-path "project.json" --treat-warnings-as-errors false
 
-    # FIX 3: Changed flag from --output-directory to the required -o flag
+    # FIX 4: Pack using the native compiler tool
     - name: Pack Legacy Automation Project
-      run: uip rpa-legacy pack . -o "artifacts/"
+      shell: powershell
+      run: |
+        UiPath.Studio.CommandLineArgs.exe pack "project.json" -o "artifacts/" --skip-analysis
 
-    # FIX 4: Explicitly passed repository environment secrets into the deploy task command
+    # FIX 5: Deploy utilizing the native deployment wrapper engine
     - name: Deploy Package to Orchestrator
-      run: >
-        uip orchestrator deploy 
-        --package-path "artifacts/" 
-        --folder-name "Shared" 
-        --url "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" 
-        --organization "${{ secrets.UIPATH_ORGANIZATION }}" 
-        --tenant "${{ secrets.UIPATH_TENANT }}" 
-        --client-id "${{ secrets.UIPATH_CLIENT_ID }}" 
-        --client-secret "${{ secrets.UIPATH_CLIENT_SECRET }}"
+      shell: powershell
+      run: |
+        UiPath.Studio.CommandLineArgs.exe deploy --package-path "artifacts/" --folder-name "Shared" --url "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" --organization "${{ secrets.UIPATH_ORGANIZATION }}" --tenant "${{ secrets.UIPATH_TENANT }}" --client-id "${{ secrets.UIPATH_CLIENT_ID }}" --client-secret "${{ secrets.UIPATH_CLIENT_SECRET }}"
