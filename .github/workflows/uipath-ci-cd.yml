@@ -28,14 +28,30 @@ jobs:
     - name: Install UiPath CLI
       shell: powershell
       run: |
-        Write-Host "Installing UiPath CLI via nuget..."
-        dotnet tool install --global UiPath.CLI --version "1.0.*"
+        Write-Host "Installing UiPath CLI..."
+        
+        # Try installing the latest available version without version constraint
+        dotnet tool install --global UiPath.CLI 2>&1 | Out-String | ForEach-Object { Write-Host $_ }
+        
+        # Add .dotnet tools to PATH
+        $dotnetToolsPath = "$env:USERPROFILE\.dotnet\tools"
+        if ($dotnetToolsPath -notin $env:PATH.Split(';')) {
+          $env:PATH = "$dotnetToolsPath;$env:PATH"
+          Write-Host "Added .dotnet tools to PATH"
+        }
         
         # Verify installation
-        uipath --version
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Failed to install or verify UiPath CLI"
-          exit 1
+        $cliPath = "$dotnetToolsPath\uipath.exe"
+        if (Test-Path $cliPath) {
+          Write-Host "UiPath CLI installed at: $cliPath"
+          & $cliPath --version
+        } else {
+          Write-Host "Attempting alternative installation method..."
+          dotnet tool install --global UiPath.CLI --version 22.* 2>&1 | Out-String | ForEach-Object { Write-Host $_ }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to install UiPath CLI"
+            exit 1
+          }
         }
 
     - name: Create Artifact Directory
@@ -50,7 +66,15 @@ jobs:
       shell: powershell
       run: |
         Write-Host "Validating UiPath project..."
-        uipath project validate -p "${{ env.PROJECT_PATH }}"
+        
+        $cliPath = "$env:USERPROFILE\.dotnet\tools\uipath.exe"
+        
+        if (-Not (Test-Path $cliPath)) {
+          Write-Error "UiPath CLI not found at $cliPath"
+          exit 1
+        }
+        
+        & $cliPath project validate -p "${{ env.PROJECT_PATH }}"
         if ($LASTEXITCODE -ne 0) {
           Write-Error "Project validation failed"
           exit 1
@@ -60,7 +84,10 @@ jobs:
       shell: powershell
       run: |
         Write-Host "Packing automation project..."
-        uipath project pack `
+        
+        $cliPath = "$env:USERPROFILE\.dotnet\tools\uipath.exe"
+        
+        & $cliPath project pack `
           -p "${{ env.PROJECT_PATH }}" `
           -o "${{ env.ARTIFACT_DIR }}" `
           -v 1.0.0
@@ -77,6 +104,7 @@ jobs:
       run: |
         Write-Host "Deploying package to Orchestrator..."
         
+        $cliPath = "$env:USERPROFILE\.dotnet\tools\uipath.exe"
         $packagePath = Get-ChildItem "${{ env.ARTIFACT_DIR }}" -Filter "*.nupkg" | Select-Object -First 1
         
         if (-Not $packagePath) {
@@ -86,7 +114,7 @@ jobs:
         
         Write-Host "Deploying package: $($packagePath.FullName)"
         
-        uipath package deploy `
+        & $cliPath package deploy `
           --package "$($packagePath.FullName)" `
           --orchestrator-url "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" `
           --organization-unit "${{ secrets.UIPATH_ORGANIZATION }}" `
