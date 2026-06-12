@@ -4,6 +4,10 @@ on:
   push:
     branches: [ "main" ]
 
+env:
+  ARTIFACT_DIR: ./artifacts
+  PROJECT_PATH: ./project.json
+
 jobs:
   build-and-deploy:
     runs-on: windows-latest
@@ -12,33 +16,96 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # FIX 1: Install the native Windows UiPath Compiler Tools Bundle
-    - name: Install Standalone UiPath CLI Tools
+    - name: Validate Project File
       shell: powershell
       run: |
-        Invoke-WebRequest -Uri "https://uipath.com" -OutFile "UiPathStudio.msi"
-        Start-Process msiexec.exe -ArgumentList '/i UiPathStudio.msi /qn ADDLOCAL=DesktopFeature,Robot,Studio,CommandLineCLI' -Wait
+        if (-Not (Test-Path "${{ env.PROJECT_PATH }}")) {
+          Write-Error "project.json not found at ${{ env.PROJECT_PATH }}"
+          exit 1
+        }
+        Write-Host "Project file validated successfully"
 
-    # FIX 2: Explicitly add the installation binaries directory to the pipeline PATH environment
-    - name: Configure Execution Environment PATH
+    - name: Install UiPath CLI
       shell: powershell
       run: |
-        echo "C:\Program Files\UiPath\Studio" >> $GITHUB_PATH
+        Write-Host "Installing UiPath CLI via nuget..."
+        dotnet tool install --global UiPath.CLI --version "1.0.*"
+        
+        # Verify installation
+        uipath --version
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Failed to install or verify UiPath CLI"
+          exit 1
+        }
 
-    # FIX 3: Execute validation using the native architectural validation binary
-    - name: Validate Legacy UiPath Architecture
+    - name: Create Artifact Directory
       shell: powershell
       run: |
-        UiPath.Studio.CommandLineArgs.exe analyze --project-path "project.json" --treat-warnings-as-errors false
+        if (-Not (Test-Path "${{ env.ARTIFACT_DIR }}")) {
+          New-Item -ItemType Directory -Path "${{ env.ARTIFACT_DIR }}" -Force | Out-Null
+          Write-Host "Artifact directory created: ${{ env.ARTIFACT_DIR }}"
+        }
 
-    # FIX 4: Pack using the native compiler tool
-    - name: Pack Legacy Automation Project
+    - name: Validate Project
       shell: powershell
       run: |
-        UiPath.Studio.CommandLineArgs.exe pack "project.json" -o "artifacts/" --skip-analysis
+        Write-Host "Validating UiPath project..."
+        uipath project validate -p "${{ env.PROJECT_PATH }}"
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Project validation failed"
+          exit 1
+        }
 
-    # FIX 5: Deploy utilizing the native deployment wrapper engine
-    - name: Deploy Package to Orchestrator
+    - name: Pack Automation Project
       shell: powershell
       run: |
-        UiPath.Studio.CommandLineArgs.exe deploy --package-path "artifacts/" --folder-name "Shared" --url "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" --organization "${{ secrets.UIPATH_ORGANIZATION }}" --tenant "${{ secrets.UIPATH_TENANT }}" --client-id "${{ secrets.UIPATH_CLIENT_ID }}" --client-secret "${{ secrets.UIPATH_CLIENT_SECRET }}"
+        Write-Host "Packing automation project..."
+        uipath project pack `
+          -p "${{ env.PROJECT_PATH }}" `
+          -o "${{ env.ARTIFACT_DIR }}" `
+          -v 1.0.0
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Project pack failed"
+          exit 1
+        }
+        
+        Get-ChildItem "${{ env.ARTIFACT_DIR }}" | ForEach-Object { Write-Host "Generated: $_" }
+
+    - name: Deploy to Orchestrator
+      shell: powershell
+      run: |
+        Write-Host "Deploying package to Orchestrator..."
+        
+        $packagePath = Get-ChildItem "${{ env.ARTIFACT_DIR }}" -Filter "*.nupkg" | Select-Object -First 1
+        
+        if (-Not $packagePath) {
+          Write-Error "No nupkg file found in ${{ env.ARTIFACT_DIR }}"
+          exit 1
+        }
+        
+        Write-Host "Deploying package: $($packagePath.FullName)"
+        
+        uipath package deploy `
+          --package "$($packagePath.FullName)" `
+          --orchestrator-url "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" `
+          --organization-unit "${{ secrets.UIPATH_ORGANIZATION }}" `
+          --tenant "${{ secrets.UIPATH_TENANT }}" `
+          --user-key "${{ secrets.UIPATH_USER_KEY }}" `
+          --environment-type "staging" `
+          --create-process-if-not-exists
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Package deployment failed"
+          exit 1
+        }
+        
+        Write-Host "Deployment completed successfully"
+
+    - name: Upload Artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: uipath-packages
+        path: ${{ env.ARTIFACT_DIR }}
+        retention-days: 30
