@@ -1,95 +1,158 @@
-name: UiPath REFramework CI/CD Pipeline
+name: UiPath CI/CD
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - develop
+      - uat
+      - main
+
   pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches:
+      - main
 
 jobs:
-  build-and-deploy:
-    runs-on: self-hosted
+
+  build:
+
+    runs-on: windows-latest
 
     steps:
-    - name: Checkout Code
+
+    - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Check UiPath Studio Installation
-      shell: powershell
-      run: |
-        Write-Host "Checking for UiPath Studio..."
-        $paths = @(
-          "${env:ProgramFiles}\UiPath\Studio\UiPath.Studio.CommandLine.exe",
-          "${env:ProgramFiles(x86)}\UiPath\Studio\UiPath.Studio.CommandLine.exe",
-          "${env:LocalAppData}\Programs\UiPath\Studio\UiPath.Studio.CommandLine.exe"
-        )
-        
-        $studioFound = $false
-        foreach ($path in $paths) {
-            if (Test-Path $path) {
-                Write-Host "Found UiPath Studio CLI at: $path"
-                $studioFound = $true
-                break
-            }
-        }
-        
-        if (-not $studioFound) {
-            Write-Error "UiPath Studio CommandLine tool not found on this self-hosted runner!"
-            exit 1
-        }
-
-    - name: Find UiPath Command Line Tools
-      id: find-cli
-      shell: powershell
-      run: |
-        $paths = @(
-          "${env:ProgramFiles}\UiPath\Studio\UiPath.Studio.CommandLine.exe",
-          "${env:ProgramFiles(x86)}\UiPath\Studio\UiPath.Studio.CommandLine.exe",
-          "${env:LocalAppData}\Programs\UiPath\Studio\UiPath.Studio.CommandLine.exe"
-        )
-        foreach ($path in $paths) {
-            if (Test-Path $path) {
-                echo "uipath_cli=$path" >> $env:GITHUB_OUTPUT
-                exit 0
-            }
-        }
-        Write-Error "UiPath CLI tool could not be located."
-        exit 1
-
-    - name: Create Artifact Directory
-      run: mkdir -p build/packages
-
-    - name: Validate Project (Workflow Analyzer)
-      shell: powershell
-      run: |
-        $cli = "${{ steps.find-cli.outputs.uipath_cli }}"
-        Write-Host "Running Workflow Analyzer..."
-        & $cli analyze --project-path "project.json"
-
-    - name: Pack Automation Project
-      shell: powershell
-      run: |
-        $cli = "${{ steps.find-cli.outputs.uipath_cli }}"
-        Write-Host "Packaging REFramework project..."
-        & $cli pack "project.json" --output "build/packages" --output-kind Project
-
-    # ADDED: Upload step using the official UiPath Deploy Action and your GitHub Secrets
-    - name: Deploy Package to UiPath Orchestrator
-      uses: UiPath/uipath-actions/UipathDeploy@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
       with:
-        orchestratorUrl: ${{ secrets.UIPATH_ORCHESTRATOR_URL }}
-        # If using Cloud Orchestrator (User Key/Refresh Token authentication method)
-        userKey: ${{ secrets.UIPATH_USER_KEY }}
-        tenantName: ${{ secrets.UIPATH_TENANT_NAME }}
-        # If using modern external application/OAuth credentials, use these instead:
-        # clientId: ${{ secrets.UIPATH_CLIENT_ID }}
-        # clientSecret: ${{ secrets.UIPATH_CLIENT_SECRET }}
-        folderName: 'Shared' # Change this to your specific Orchestrator Folder name
-        packagePath: 'build/packages'
+        dotnet-version: '8.0.x'
 
-    - name: Upload Artifacts to GitHub
+    - name: Install UiPath CLI
+      shell: pwsh
+      run: |
+        dotnet tool install --global UiPath.CLI
+
+    - name: Restore Dependencies
+      shell: pwsh
+      run: |
+        uipcli package restore .
+
+    - name: Pack Project
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path output
+        uipcli package pack . --output output
+
+    - name: Upload Package
       uses: actions/upload-artifact@v4
       with:
         name: uipath-package
-        path: build/packages/
+        path: output/*.nupkg
+
+  deploy-dev:
+
+    if: github.ref == 'refs/heads/develop'
+
+    needs: build
+
+    runs-on: windows-latest
+
+    environment: Development
+
+    steps:
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: uipath-package
+        path: output
+
+    - name: Install UiPath CLI
+      shell: pwsh
+      run: |
+        dotnet tool install --global UiPath.CLI
+
+    - name: Deploy DEV
+      shell: pwsh
+      run: |
+        $package = Get-ChildItem output\*.nupkg | Select-Object -First 1
+
+        uipcli package deploy `
+          --packagePath $package.FullName `
+          --orchestratorUrl "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" `
+          --organization "${{ secrets.UIPATH_ORGANIZATION }}" `
+          --tenant "${{ secrets.UIPATH_TENANT }}" `
+          --applicationId "${{ secrets.UIPATH_CLIENT_ID }}" `
+          --applicationSecret "${{ secrets.UIPATH_CLIENT_SECRET }}" `
+          --folder "${{ secrets.UIPATH_DEV_FOLDER }}"
+
+  deploy-uat:
+
+    if: github.ref == 'refs/heads/uat'
+
+    needs: build
+
+    runs-on: windows-latest
+
+    environment: UAT
+
+    steps:
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: uipath-package
+        path: output
+
+    - name: Install UiPath CLI
+      shell: pwsh
+      run: |
+        dotnet tool install --global UiPath.CLI
+
+    - name: Deploy UAT
+      shell: pwsh
+      run: |
+        $package = Get-ChildItem output\*.nupkg | Select-Object -First 1
+
+        uipcli package deploy `
+          --packagePath $package.FullName `
+          --orchestratorUrl "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" `
+          --organization "${{ secrets.UIPATH_ORGANIZATION }}" `
+          --tenant "${{ secrets.UIPATH_TENANT }}" `
+          --applicationId "${{ secrets.UIPATH_CLIENT_ID }}" `
+          --applicationSecret "${{ secrets.UIPATH_CLIENT_SECRET }}" `
+          --folder "${{ secrets.UIPATH_UAT_FOLDER }}"
+
+  deploy-prod:
+
+    if: github.ref == 'refs/heads/main'
+
+    needs: build
+
+    runs-on: windows-latest
+
+    environment: Production
+
+    steps:
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: uipath-package
+        path: output
+
+    - name: Install UiPath CLI
+      shell: pwsh
+      run: |
+        dotnet tool install --global UiPath.CLI
+
+    - name: Deploy PROD
+      shell: pwsh
+      run: |
+        $package = Get-ChildItem output\*.nupkg | Select-Object -First 1
+
+        uipcli package deploy `
+          --packagePath $package.FullName `
+          --orchestratorUrl "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" `
+          --organization "${{ secrets.UIPATH_ORGANIZATION }}" `
+          --tenant "${{ secrets.UIPATH_TENANT }}" `
+          --applicationId "${{ secrets.UIPATH_CLIENT_ID }}" `
+          --applicationSecret "${{ secrets.UIPATH_CLIENT_SECRET }}" `
+          --folder "${{ secrets.UIPATH_PROD_FOLDER }}"
