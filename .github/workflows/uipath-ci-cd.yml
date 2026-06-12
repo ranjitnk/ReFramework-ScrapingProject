@@ -104,7 +104,7 @@ jobs:
 
     - name: Upload Artifacts
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: uipath-packages
         path: ${{ env.ARTIFACT_DIR }}
