@@ -70,7 +70,7 @@ jobs:
           name: uipath-package
           path: output
 
-      - name: Install UiPath CLI updated
+      - name: Install UiPath CLI
         shell: pwsh
         run: |
           Invoke-WebRequest `
