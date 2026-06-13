@@ -21,21 +21,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup DotNet
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-
-      - name: Download UiPath CLI
-        shell: pwsh
-        run: |
-          Invoke-WebRequest `
-            -Uri "https://uipath.pkgs.visualstudio.com/Public.Feeds/_apis/packaging/feeds/UiPath-Official/nuget/packages/UiPath.CLI.Windows/versions/latest/content" `
-            -OutFile uipcli.zip
-
-          Expand-Archive uipcli.zip -DestinationPath uipcli -Force
-
-          .\uipcli\uipcli.exe --version
 
       - name: Generate Version
         id: version
@@ -61,74 +50,6 @@ jobs:
           name: uipath-package
           path: output/*.nupkg
 
-  deploy-dev:
-
-    if: github.ref == 'refs/heads/develop'
-
-    needs: build
-
-    runs-on: windows-latest
-
-    steps:
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: uipath-package
-          path: output
-
-      - name: Install UiPath CLI
-        shell: pwsh
-        run: |
-          Invoke-WebRequest `
-            -Uri "https://uipath.pkgs.visualstudio.com/Public.Feeds/_apis/packaging/feeds/UiPath-Official/nuget/packages/UiPath.CLI.Windows/versions/latest/content" `
-            -OutFile uipcli.zip
-
-          Expand-Archive uipcli.zip -DestinationPath uipcli -Force
-
-          .\uipcli\uipcli.exe --version
-
-      - name: Upload Package To Orchestrator
-        shell: pwsh
-        run: |
-          $pkg = Get-ChildItem output\*.nupkg | Select-Object -First 1
-          uip or packages upload $pkg.FullName
-
-      - name: List DEV Processes
-        shell: pwsh
-        run: |
-          uip or processes list --folder-path "${{ secrets.UIPATH_FOLDER_DEV }}"
-
-  deploy-uat:
-
-    if: github.ref == 'refs/heads/uat'
-
-    needs: build
-
-    runs-on: windows-latest
-
-    steps:
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: uipath-package
-          path: output
-
-      - name: Install UiPath CLI
-        shell: pwsh
-        run: |
-          dotnet tool install --global UiPath.CLI --ignore-failed-sources
-
-      - name: Upload Package To Orchestrator
-        shell: pwsh
-        run: |
-          $pkg = Get-ChildItem output\*.nupkg | Select-Object -First 1
-          uip or packages upload $pkg.FullName
-
-      - name: List UAT Processes
-        shell: pwsh
-        run: |
-          uip or processes list --folder-path "${{ secrets.UIPATH_FOLDER_UAT }}"
-
   deploy-prod:
 
     if: github.ref == 'refs/heads/main'
@@ -139,6 +60,12 @@ jobs:
 
     environment: Production
 
+    env:
+      UIPATH_CLIENT_ID: ${{ secrets.UIPATH_CLIENT_ID }}
+      UIPATH_CLIENT_SECRET: ${{ secrets.UIPATH_CLIENT_SECRET }}
+      UIPATH_ORGANIZATION: ${{ secrets.UIPATH_ORGANIZATION }}
+      UIPATH_TENANT: ${{ secrets.UIPATH_TENANT }}
+
     steps:
 
       - uses: actions/download-artifact@v4
@@ -146,18 +73,38 @@ jobs:
           name: uipath-package
           path: output
 
-      - name: Install UiPath CLI
+      - name: Login To UiPath
         shell: pwsh
         run: |
-          dotnet tool install --global UiPath.CLI --ignore-failed-sources
+          uip login `
+            --client-id $env:UIPATH_CLIENT_ID `
+            --client-secret $env:UIPATH_CLIENT_SECRET `
+            --organization $env:UIPATH_ORGANIZATION `
+            --tenant $env:UIPATH_TENANT
 
-      - name: Upload Package To Orchestrator
+      - name: Upload Package
         shell: pwsh
         run: |
           $pkg = Get-ChildItem output\*.nupkg | Select-Object -First 1
           uip or packages upload $pkg.FullName
 
-      - name: Verify PROD Folder
+      - name: Show Package Versions
         shell: pwsh
         run: |
-          uip or processes list --folder-path "${{ secrets.UIPATH_FOLDER_PROD }}"
+          uip or packages versions REFramework.Scraping.with.Queue
+
+      - name: Create Process If Needed
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          uip or processes create `
+            --folder-path "${{ secrets.UIPATH_FOLDER_PROD }}" `
+            --name "REFramework Scraping with Queue" `
+            --package-key "REFramework.Scraping.with.Queue" `
+            --package-version "${{ needs.build.outputs.packageVersion }}"
+
+      - name: Verify Process
+        shell: pwsh
+        run: |
+          uip or processes list `
+            --folder-path "${{ secrets.UIPATH_FOLDER_PROD }}"
