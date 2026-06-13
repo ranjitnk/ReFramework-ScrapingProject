@@ -34,12 +34,12 @@ jobs:
         shell: pwsh
         run: |
           Invoke-WebRequest `
-            -Uri "https://uipath.pkgs.visualstudio.com/Public.Feeds/_apis/packaging/feeds/UiPath-Official/nuget/packages/UiPath.CLI.Windows/versions/latest/content" `
+            -Uri "https://download.uipath.com/cli/latest/uipcli-windows.zip" `
             -OutFile uipcli.zip
 
           Expand-Archive uipcli.zip -DestinationPath uipcli -Force
 
-          .\uipcli\uipcli.exe --version
+          Get-ChildItem .\uipcli -Recurse
 
       - name: Generate Version
         id: version
