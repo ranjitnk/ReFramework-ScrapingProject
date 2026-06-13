@@ -27,7 +27,7 @@ jobs:
       - name: Install UiPath CLI
         shell: pwsh
         run: |
-          dotnet tool install -g UiPath.CLI --add-source https://uipath.myget.org/F/uipath-official/api/v3/index.json
+          dotnet tool install -g UiPath.CLI.Windows
 
       - name: Verify UiPath CLI
         shell: pwsh
@@ -87,7 +87,7 @@ jobs:
       - name: Install UiPath CLI
         shell: pwsh
         run: |
-          dotnet tool install -g UiPath.CLI --add-source https://uipath.myget.org/F/uipath-official/api/v3/index.json
+          dotnet tool install -g UiPath.CLI.Windows
 
       - name: Verify UiPath CLI
         shell: pwsh
