@@ -7,47 +7,53 @@ on:
       - uat
       - main
 
-  pull_request:
-    branches:
-      - main
-
 jobs:
 
   build:
 
     runs-on: windows-latest
 
+    outputs:
+      packageVersion: ${{ steps.version.outputs.version }}
+
     steps:
 
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
+      - name: Setup DotNet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
 
-    - name: Install UiPath CLI
-      shell: pwsh
-      run: |
-        dotnet tool install --global UiPath.CLI
+      - name: Install UiPath CLI
+        shell: pwsh
+        run: |
+          dotnet tool install --global UiPath.CLI --ignore-failed-sources
 
-    - name: Restore Dependencies
-      shell: pwsh
-      run: |
-        uipcli package restore .
+      - name: Generate Version
+        id: version
+        shell: pwsh
+        run: |
+          $ver = "1.0.${{ github.run_number }}"
+          echo "version=$ver" >> $env:GITHUB_OUTPUT
 
-    - name: Pack Project
-      shell: pwsh
-      run: |
-        New-Item -ItemType Directory -Force -Path output
-        uipcli package pack . --output output
+      - name: Create Output Folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path output
 
-    - name: Upload Package
-      uses: actions/upload-artifact@v4
-      with:
-        name: uipath-package
-        path: output/*.nupkg
+      - name: Pack Project
+        shell: pwsh
+        run: |
+          uip rpa pack . output `
+            --package-version "${{ steps.version.outputs.version }}"
+
+      - name: Upload Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uipath-package
+          path: output/*.nupkg
 
   deploy-dev:
 
@@ -57,33 +63,28 @@ jobs:
 
     runs-on: windows-latest
 
-    environment: Development
-
     steps:
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: uipath-package
-        path: output
+      - uses: actions/download-artifact@v4
+        with:
+          name: uipath-package
+          path: output
 
-    - name: Install UiPath CLI
-      shell: pwsh
-      run: |
-        dotnet tool install --global UiPath.CLI
+      - name: Install UiPath CLI
+        shell: pwsh
+        run: |
+          dotnet tool install --global UiPath.CLI --ignore-failed-sources
 
-    - name: Deploy DEV
-      shell: pwsh
-      run: |
-        $package = Get-ChildItem output\*.nupkg | Select-Object -First 1
+      - name: Upload Package To Orchestrator
+        shell: pwsh
+        run: |
+          $pkg = Get-ChildItem output\*.nupkg | Select-Object -First 1
+          uip or packages upload $pkg.FullName
 
-        uipcli package deploy `
-          --packagePath $package.FullName `
-          --orchestratorUrl "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" `
-          --organization "${{ secrets.UIPATH_ORGANIZATION }}" `
-          --tenant "${{ secrets.UIPATH_TENANT }}" `
-          --applicationId "${{ secrets.UIPATH_CLIENT_ID }}" `
-          --applicationSecret "${{ secrets.UIPATH_CLIENT_SECRET }}" `
-          --folder "${{ secrets.UIPATH_DEV_FOLDER }}"
+      - name: List DEV Processes
+        shell: pwsh
+        run: |
+          uip or processes list --folder-path "${{ secrets.UIPATH_FOLDER_DEV }}"
 
   deploy-uat:
 
@@ -93,33 +94,28 @@ jobs:
 
     runs-on: windows-latest
 
-    environment: UAT
-
     steps:
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: uipath-package
-        path: output
+      - uses: actions/download-artifact@v4
+        with:
+          name: uipath-package
+          path: output
 
-    - name: Install UiPath CLI
-      shell: pwsh
-      run: |
-        dotnet tool install --global UiPath.CLI
+      - name: Install UiPath CLI
+        shell: pwsh
+        run: |
+          dotnet tool install --global UiPath.CLI --ignore-failed-sources
 
-    - name: Deploy UAT
-      shell: pwsh
-      run: |
-        $package = Get-ChildItem output\*.nupkg | Select-Object -First 1
+      - name: Upload Package To Orchestrator
+        shell: pwsh
+        run: |
+          $pkg = Get-ChildItem output\*.nupkg | Select-Object -First 1
+          uip or packages upload $pkg.FullName
 
-        uipcli package deploy `
-          --packagePath $package.FullName `
-          --orchestratorUrl "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" `
-          --organization "${{ secrets.UIPATH_ORGANIZATION }}" `
-          --tenant "${{ secrets.UIPATH_TENANT }}" `
-          --applicationId "${{ secrets.UIPATH_CLIENT_ID }}" `
-          --applicationSecret "${{ secrets.UIPATH_CLIENT_SECRET }}" `
-          --folder "${{ secrets.UIPATH_UAT_FOLDER }}"
+      - name: List UAT Processes
+        shell: pwsh
+        run: |
+          uip or processes list --folder-path "${{ secrets.UIPATH_FOLDER_UAT }}"
 
   deploy-prod:
 
@@ -133,26 +129,23 @@ jobs:
 
     steps:
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: uipath-package
-        path: output
+      - uses: actions/download-artifact@v4
+        with:
+          name: uipath-package
+          path: output
 
-    - name: Install UiPath CLI
-      shell: pwsh
-      run: |
-        dotnet tool install --global UiPath.CLI
+      - name: Install UiPath CLI
+        shell: pwsh
+        run: |
+          dotnet tool install --global UiPath.CLI --ignore-failed-sources
 
-    - name: Deploy PROD
-      shell: pwsh
-      run: |
-        $package = Get-ChildItem output\*.nupkg | Select-Object -First 1
+      - name: Upload Package To Orchestrator
+        shell: pwsh
+        run: |
+          $pkg = Get-ChildItem output\*.nupkg | Select-Object -First 1
+          uip or packages upload $pkg.FullName
 
-        uipcli package deploy `
-          --packagePath $package.FullName `
-          --orchestratorUrl "${{ secrets.UIPATH_ORCHESTRATOR_URL }}" `
-          --organization "${{ secrets.UIPATH_ORGANIZATION }}" `
-          --tenant "${{ secrets.UIPATH_TENANT }}" `
-          --applicationId "${{ secrets.UIPATH_CLIENT_ID }}" `
-          --applicationSecret "${{ secrets.UIPATH_CLIENT_SECRET }}" `
-          --folder "${{ secrets.UIPATH_PROD_FOLDER }}"
+      - name: Verify PROD Folder
+        shell: pwsh
+        run: |
+          uip or processes list --folder-path "${{ secrets.UIPATH_FOLDER_PROD }}"

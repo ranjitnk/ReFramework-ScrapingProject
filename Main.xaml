@@ -119,7 +119,7 @@
       <AssemblyReference>System.Collections.NonGeneric</AssemblyReference>
     </scg:List>
   </TextExpression.ReferencesForImplementation>
-  <StateMachine InitialState="{x:Reference __ReferenceID3}" sap2010:Annotation.AnnotationText="[Process title]&#xA;[Process description]&#xA;[Additional information (e.g., author, contact information and applications involved and required external setup)]" DisplayName="General Business Process" sap:VirtualizedContainerService.HintSize="926.6666666666666,444.32333333333327" sap2010:WorkflowViewState.IdRef="StateMachine_1">
+  <StateMachine InitialState="{x:Reference __ReferenceID3}" sap2010:Annotation.AnnotationText="[Process title]&#xA;[Process description]&#xA;[Additional information (e.g., author, contact information and applications involved and required external setup)]" DisplayName="General Business Process" sap:VirtualizedContainerService.HintSize="568,210.32333333333332" sap2010:WorkflowViewState.IdRef="StateMachine_1">
     <sap:WorkflowViewStateService.ViewState>
       <scg:Dictionary x:TypeArguments="x:String, x:Object">
         <x:Boolean x:Key="IsExpanded">True</x:Boolean>
@@ -793,7 +793,7 @@
                                   </InArgument>
                                 </ui:ReadRange.Range>
                               </ui:ReadRange>
-                              <ui:ForEachRow ColumnNames="{x:Null}" CurrentIndex="{x:Null}" DataTable="[dt_ProductData]" DisplayName="For Each Row in Data Table" sap:VirtualizedContainerService.HintSize="452,464.6666666666667" sap2010:WorkflowViewState.IdRef="ForEachRow_1">
+                              <ui:ForEachRow ColumnNames="{x:Null}" CurrentIndex="{x:Null}" DataTable="[dt_ProductData]" DisplayName="For Each Row in Data Table from ExcelData" sap:VirtualizedContainerService.HintSize="452,432.6666666666667" sap2010:WorkflowViewState.IdRef="ForEachRow_1">
                                 <ui:ForEachRow.Body>
                                   <ActivityAction x:TypeArguments="sd:DataRow">
                                     <ActivityAction.Argument>
@@ -805,7 +805,7 @@
                                           <x:Boolean x:Key="IsExpanded">True</x:Boolean>
                                         </scg:Dictionary>
                                       </sap:WorkflowViewStateService.ViewState>
-                                      <ui:AddQueueItem TimeoutMS="{x:Null}" DisplayName="Add Queue Item" FolderPath="Shared" sap:VirtualizedContainerService.HintSize="416,220.66666666666666" sap2010:WorkflowViewState.IdRef="AddQueueItem_1" Priority="Normal" QueueType="ManufacturingQueue" Reference="[CurrentRow(&quot;Product ID&quot;).ToString]">
+                                      <ui:AddQueueItem TimeoutMS="{x:Null}" DisplayName="Add Queue Items" FolderPath="Shared" sap:VirtualizedContainerService.HintSize="334,198" sap2010:WorkflowViewState.IdRef="AddQueueItem_1" Priority="Normal" QueueType="ManufacturingQueue" Reference="[CurrentRow(&quot;Product ID&quot;).ToString]">
                                         <ui:AddQueueItem.ItemInformation>
                                           <InArgument x:TypeArguments="x:String" x:Key="ProductID">[CurrentRow("Product ID").ToString]</InArgument>
                                           <InArgument x:TypeArguments="x:String" x:Key="MfgID">[CurrentRow("Mfg ID").ToString]</InArgument>
