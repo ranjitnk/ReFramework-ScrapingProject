@@ -97,7 +97,7 @@ jobs:
       - name: Login To UiPath
         shell: pwsh
         run: |
-          uipcli uipcli or authenticate `
+          uipcli or authenticate `
             --client-id $env:UIPATH_CLIENT_ID `
             --client-secret $env:UIPATH_CLIENT_SECRET `
             --organization $env:UIPATH_ORGANIZATION `
