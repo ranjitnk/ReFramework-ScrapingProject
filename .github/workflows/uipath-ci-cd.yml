@@ -24,16 +24,15 @@ jobs:
         with:
           dotnet-version: '8.0.x'
       
-      - name: Download UiPath CLI
+      - name: Install UiPath CLI
         shell: pwsh
         run: |
-          Invoke-WebRequest `
-            -Uri "https://download.uipath.com/cli/latest/uipcli-windows.zip" `
-            -OutFile uipcli.zip
+          dotnet tool install -g UiPath.CLI
 
-          Expand-Archive uipcli.zip -DestinationPath uipcli -Force
-
-          Get-ChildItem .\uipcli -Recurse
+      - name: Verify UiPath CLI
+        shell: pwsh
+        run: |
+          uipcli --version
 
       - name: Generate Version
         id: version
@@ -50,7 +49,7 @@ jobs:
       - name: Pack Project
         shell: pwsh
         run: |
-          .\uipcli\uipcli.exe package pack `
+          uipcli package pack `
             "." `
             -o output `
             -v "${{ steps.version.outputs.version }}"
@@ -85,21 +84,20 @@ jobs:
           name: uipath-package
           path: output
 
-      - name: Download UiPath CLI
+      - name: Install UiPath CLI
         shell: pwsh
         run: |
-          Invoke-WebRequest `
-            -Uri "https://uipath.pkgs.visualstudio.com/Public.Feeds/_apis/packaging/feeds/UiPath-Official/nuget/packages/UiPath.CLI.Windows/versions/latest/content" `
-            -OutFile uipcli.zip
+          dotnet tool install -g UiPath.CLI
 
-          Expand-Archive uipcli.zip -DestinationPath uipcli -Force
-
-          .\uipcli\uipcli.exe --version
+      - name: Verify UiPath CLI
+        shell: pwsh
+        run: |
+          uipcli --version
 
       - name: Login To UiPath
         shell: pwsh
         run: |
-          .\uipcli\uipcli.exe login `
+          uipcli login `
             --client-id $env:UIPATH_CLIENT_ID `
             --client-secret $env:UIPATH_CLIENT_SECRET `
             --organization $env:UIPATH_ORGANIZATION `
@@ -110,13 +108,13 @@ jobs:
         run: |
           $pkg = Get-ChildItem output\*.nupkg | Select-Object -First 1
 
-          .\uipcli\uipcli.exe or packages upload $pkg.FullName
+          uipcli or packages upload $pkg.FullName
 
       - name: Create Process
         shell: pwsh
         continue-on-error: true
         run: |
-          .\uipcli\uipcli.exe or processes create `
+          uipcli or processes create `
             --folder-path "$env:UIPATH_FOLDER_PROD" `
             --name "REFramework Scraping with Queue" `
             --package-key "REFramework.Scraping.with.Queue" `
@@ -125,5 +123,5 @@ jobs:
       - name: Verify Process
         shell: pwsh
         run: |
-          .\uipcli\uipcli.exe or processes list `
+          uipcli or processes list `
             --folder-path "$env:UIPATH_FOLDER_PROD"
