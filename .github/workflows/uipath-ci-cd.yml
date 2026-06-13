@@ -26,10 +26,16 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Install UiPath CLI
+      - name: Download UiPath CLI
         shell: pwsh
         run: |
-          dotnet tool install --global UiPath.CLI --ignore-failed-sources
+          Invoke-WebRequest `
+            -Uri "https://uipath.pkgs.visualstudio.com/Public.Feeds/_apis/packaging/feeds/UiPath-Official/nuget/packages/UiPath.CLI.Windows/versions/latest/content" `
+            -OutFile uipcli.zip
+
+          Expand-Archive uipcli.zip -DestinationPath uipcli -Force
+
+          .\uipcli\uipcli.exe --version
 
       - name: Generate Version
         id: version
