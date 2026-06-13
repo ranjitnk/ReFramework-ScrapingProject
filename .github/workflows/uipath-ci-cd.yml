@@ -8,14 +8,11 @@ on:
 jobs:
 
   build:
-
     runs-on: windows-latest
-
     outputs:
       packageVersion: ${{ steps.version.outputs.version }}
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -61,13 +58,9 @@ jobs:
           path: output/*.nupkg
 
   deploy-prod:
-
     if: github.ref == 'refs/heads/main'
-
     needs: build
-
     runs-on: windows-latest
-
     environment: Production
 
     env:
@@ -78,7 +71,6 @@ jobs:
       UIPATH_FOLDER_PROD: ${{ secrets.UIPATH_FOLDER_PROD }}
 
     steps:
-
       - uses: actions/download-artifact@v4
         with:
           name: uipath-package
@@ -94,34 +86,21 @@ jobs:
         run: |
           uipcli --version
 
-      - name: Login To UiPath
-        shell: pwsh
-        run: |
-          uipcli or authentication add `
-            --client-id $env:UIPATH_CLIENT_ID `
-            --client-secret $env:UIPATH_CLIENT_SECRET `
-            --organization $env:UIPATH_ORGANIZATION `
-            --tenant $env:UIPATH_TENANT
-
-      - name: Upload Package
+      - name: Deploy and Create Process in Orchestrator
         shell: pwsh
         run: |
           $pkg = Get-ChildItem output\*.nupkg | Select-Object -First 1
 
-          uipcli or packages upload $pkg.FullName
-
-      - name: Create Process
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          uipcli or processes create `
-            --folder-path "$env:UIPATH_FOLDER_PROD" `
-            --name "REFramework Scraping with Queue" `
-            --package-key "REFramework.Scraping.with.Queue" `
-            --package-version "${{ needs.build.outputs.packageVersion }}"
-
-      - name: Verify Process
-        shell: pwsh
-        run: |
-          uipcli or processes list `
-            --folder-path "$env:UIPATH_FOLDER_PROD"
+          # uipcli package deploy handles upload, authentication, and process creation in one step
+          uipcli package deploy `
+            $pkg.FullName `
+            "https://cloud.uipath.com/" `
+            $env:UIPATH_TENANT `
+            -A $env:UIPATH_ORGANIZATION `
+            -I $env:UIPATH_CLIENT_ID `
+            -S $env:UIPATH_CLIENT_SECRET `
+            --applicationScope "OR.Folders OR.BackgroundTasks OR.Execution OR.Assets" `
+            -o "$env:UIPATH_FOLDER_PROD" `
+            --processName "REFramework Scraping with Queue" `
+            --createProcess true `
+            --traceLevel Information
