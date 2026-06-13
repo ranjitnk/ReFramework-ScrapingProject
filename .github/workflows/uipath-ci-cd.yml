@@ -24,12 +24,6 @@ jobs:
         with:
           dotnet-version: '8.0.x'
       
-      - name: Check Existing UiPath CLI
-        shell: pwsh
-        run: |
-          Get-Command uip -ErrorAction SilentlyContinue
-          uip --version
-
       - name: Download UiPath CLI
         shell: pwsh
         run: |
