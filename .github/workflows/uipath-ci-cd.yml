@@ -6,16 +6,13 @@ on:
       - main
 
 jobs:
-
   build:
-
     runs-on: windows-latest
 
     outputs:
       packageVersion: ${{ steps.version.outputs.version }}
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -23,11 +20,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      
+
       - name: Install UiPath CLI
         shell: pwsh
         run: |
-          dotnet tool install -g UiPath.CLI.Windows
+          dotnet tool install -g UiPath.CLI.Windows --source https://nuget.uipath.com/api/v3/index.json
 
       - name: Verify UiPath CLI
         shell: pwsh
@@ -51,7 +48,7 @@ jobs:
         run: |
           uipcli package pack `
             "." `
-            -o output `
+            -o "output" `
             -v "${{ steps.version.outputs.version }}"
 
       - name: Upload Package Artifact
@@ -61,67 +58,56 @@ jobs:
           path: output/*.nupkg
 
   deploy-prod:
-
     if: github.ref == 'refs/heads/main'
-
     needs: build
-
     runs-on: windows-latest
-
     environment: Production
 
-    env:
-      UIPATH_CLIENT_ID: ${{ secrets.UIPATH_CLIENT_ID }}
-      UIPATH_CLIENT_SECRET: ${{ secrets.UIPATH_CLIENT_SECRET }}
-      UIPATH_ORGANIZATION: ${{ secrets.UIPATH_ORGANIZATION }}
-      UIPATH_TENANT: ${{ secrets.UIPATH_TENANT }}
-      UIPATH_FOLDER_PROD: ${{ secrets.UIPATH_FOLDER_PROD }}
-
     steps:
-
-      - uses: actions/download-artifact@v4
+      - name: Download Package Artifact
+        uses: actions/download-artifact@v4
         with:
           name: uipath-package
           path: output
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
       - name: Install UiPath CLI
         shell: pwsh
         run: |
-          dotnet tool install -g UiPath.CLI.Windows
+          dotnet tool install -g UiPath.CLI.Windows --source https://nuget.uipath.com/api/v3/index.json
 
       - name: Verify UiPath CLI
         shell: pwsh
         run: |
           uipcli --version
 
-      - name: Login To UiPath
+      - name: Check Package
         shell: pwsh
         run: |
-          uipcli auth `
-            --client-id $env:UIPATH_CLIENT_ID `
-            --client-secret $env:UIPATH_CLIENT_SECRET `
-            --organization $env:UIPATH_ORGANIZATION `
-            --tenant $env:UIPATH_TENANT
+          Get-ChildItem output
 
-      - name: Upload Package
+      - name: Deploy Package To Orchestrator
         shell: pwsh
+        env:
+          UIPATH_CLIENT_ID: ${{ secrets.UIPATH_CLIENT_ID }}
+          UIPATH_CLIENT_SECRET: ${{ secrets.UIPATH_CLIENT_SECRET }}
+          UIPATH_ORGANIZATION: ${{ secrets.UIPATH_ORGANIZATION }}
+          UIPATH_TENANT: ${{ secrets.UIPATH_TENANT }}
         run: |
-          $pkg = Get-ChildItem output\*.nupkg | Select-Object -First 1
+          $pkg = Get-ChildItem "output\*.nupkg" | Select-Object -First 1
 
-          uipcli or packages upload $pkg.FullName
+          if (-not $pkg) {
+            throw "No package found in output folder."
+          }
 
-      - name: Create Process
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          uipcli or processes create `
-            --folder-path "$env:UIPATH_FOLDER_PROD" `
-            --name "REFramework Scraping with Queue" `
-            --package-key "REFramework.Scraping.with.Queue" `
-            --package-version "${{ needs.build.outputs.packageVersion }}"
-
-      - name: Verify Process
-        shell: pwsh
-        run: |
-          uipcli or processes list `
-            --folder-path "$env:UIPATH_FOLDER_PROD"
+          uipcli package deploy `
+            "$($pkg.FullName)" `
+            "https://cloud.uipath.com" `
+            "$env:UIPATH_TENANT" `
+            -A "$env:UIPATH_ORGANIZATION" `
+            -I "$env:UIPATH_CLIENT_ID" `
+            -S "$env:UIPATH_CLIENT_SECRET"
