@@ -1,4 +1,4 @@
-name: UiPath CI/CD
+name: UiPath Process CI/CD
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      
+
       - name: Install UiPath CLI
         shell: pwsh
         run: |
@@ -29,6 +29,14 @@ jobs:
         shell: pwsh
         run: |
           uipcli --version
+
+      - name: Verify Project Files
+        shell: pwsh
+        run: |
+          Get-ChildItem
+          if (-not (Test-Path ".\project.json")) {
+            throw "project.json not found in repository root."
+          }
 
       - name: Generate Version
         id: version
@@ -46,9 +54,17 @@ jobs:
         shell: pwsh
         run: |
           uipcli package pack `
-            "." `
+            ".\project.json" `
             -o "output" `
             -v "${{ steps.version.outputs.version }}"
+
+      - name: Check Package Output
+        shell: pwsh
+        run: |
+          Get-ChildItem output
+          if (-not (Get-ChildItem "output\*.nupkg" -ErrorAction SilentlyContinue)) {
+            throw "No .nupkg file generated."
+          }
 
       - name: Upload Package Artifact
         uses: actions/upload-artifact@v4
@@ -99,6 +115,15 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:UIPATH_TENANT)) { throw "UIPATH_TENANT is empty" }
           if ([string]::IsNullOrWhiteSpace($env:UIPATH_FOLDER_PROD)) { throw "UIPATH_FOLDER_PROD is empty" }
 
+      - name: Check Package Artifact
+        shell: pwsh
+        run: |
+          Get-ChildItem output
+          $pkg = Get-ChildItem "output\*.nupkg" | Select-Object -First 1
+          if (-not $pkg) {
+            throw "No package found in output folder."
+          }
+
       - name: Deploy Package To Orchestrator
         shell: pwsh
         env:
@@ -110,18 +135,9 @@ jobs:
         run: |
           $pkg = Get-ChildItem "output\*.nupkg" | Select-Object -First 1
 
-          if (-not $pkg) {
-            throw "No package found in output folder."
-          }
-
           uipcli package deploy `
             "$($pkg.FullName)" `
             "https://cloud.uipath.com/" `
             "$env:UIPATH_TENANT" `
             -A "$env:UIPATH_ORGANIZATION" `
-            -I "$env:UIPATH_CLIENT_ID" `
-            -S "$env:UIPATH_CLIENT_SECRET" `
-            -o "$env:UIPATH_FOLDER_PROD" `
-            --processName "REFramework Scraping with Queue" `
-            --createProcess true `
-            --traceLevel Information
+            
