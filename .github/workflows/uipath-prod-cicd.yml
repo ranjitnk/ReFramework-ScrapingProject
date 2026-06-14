@@ -89,7 +89,7 @@ jobs:
       - name: Install UiPath CLI
         shell: pwsh
         run: |
-          dotnet tool install -g UiPath.CLI.Windows --source https://nuget.uipath.com/api/v3/index.json
+          dotnet tool install -g UiPath.CLI.Windows --source https://uipath.pkgs.visualstudio.com/Public.Feeds/_packaging/UiPath-Official/nuget/v3/index.json
 
       - name: Validate required secrets
         shell: pwsh
