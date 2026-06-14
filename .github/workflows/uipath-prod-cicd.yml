@@ -1,0 +1,136 @@
+name: UiPath Prod CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      package_version: ${{ steps.version.outputs.package_version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install UiPath CLI
+        shell: pwsh
+        run: |
+          dotnet tool install -g UiPath.CLI.Windows --source https://nuget.uipath.com/api/v3/index.json
+
+      - name: Verify project file
+        shell: pwsh
+        run: |
+          if (-not (Test-Path ".\project.json")) {
+            throw "project.json not found in repository root."
+          }
+
+      - name: Generate package version
+        id: version
+        shell: pwsh
+        run: |
+          $version = "1.0.${{ github.run_number }}"
+          "package_version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Create output folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path output | Out-Null
+
+      - name: Pack UiPath project
+        shell: pwsh
+        run: |
+          uipcli package pack `
+            ".\project.json" `
+            -o "output" `
+            -v "${{ steps.version.outputs.package_version }}"
+
+      - name: Validate package artifact
+        shell: pwsh
+        run: |
+          $pkg = Get-ChildItem "output\*.nupkg" | Select-Object -First 1
+          if (-not $pkg) {
+            throw "No .nupkg file was generated."
+          }
+          Write-Host "Package generated: $($pkg.Name)"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uipath-package
+          path: output/*.nupkg
+
+  deploy-prod:
+    needs: build
+    runs-on: windows-latest
+    environment: Prod
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: uipath-package
+          path: output
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install UiPath CLI
+        shell: pwsh
+        run: |
+          dotnet tool install -g UiPath.CLI.Windows --source https://nuget.uipath.com/api/v3/index.json
+
+      - name: Validate required secrets
+        shell: pwsh
+        env:
+          UIPATH_CLIENT_ID: ${{ secrets.UIPATH_CLIENT_ID }}
+          UIPATH_CLIENT_SECRET: ${{ secrets.UIPATH_CLIENT_SECRET }}
+          UIPATH_ORGANIZATION: ${{ secrets.UIPATH_ORGANIZATION }}
+          UIPATH_FOLDER_PROD: ${{ secrets.UIPATH_FOLDER_PROD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:UIPATH_CLIENT_ID)) { throw "UIPATH_CLIENT_ID is empty" }
+          if ([string]::IsNullOrWhiteSpace($env:UIPATH_CLIENT_SECRET)) { throw "UIPATH_CLIENT_SECRET is empty" }
+          if ([string]::IsNullOrWhiteSpace($env:UIPATH_ORGANIZATION)) { throw "UIPATH_ORGANIZATION is empty" }
+          if ([string]::IsNullOrWhiteSpace($env:UIPATH_FOLDER_PROD)) { throw "UIPATH_FOLDER_PROD is empty" }
+
+      - name: Locate package
+        shell: pwsh
+        run: |
+          $pkg = Get-ChildItem "output\*.nupkg" | Select-Object -First 1
+          if (-not $pkg) {
+            throw "No package artifact found in output folder."
+          }
+          Write-Host "Deploying package: $($pkg.FullName)"
+
+      - name: Deploy package to Prod folder
+        shell: pwsh
+        env:
+          UIPATH_CLIENT_ID: ${{ secrets.UIPATH_CLIENT_ID }}
+          UIPATH_CLIENT_SECRET: ${{ secrets.UIPATH_CLIENT_SECRET }}
+          UIPATH_ORGANIZATION: ${{ secrets.UIPATH_ORGANIZATION }}
+          UIPATH_FOLDER_PROD: ${{ secrets.UIPATH_FOLDER_PROD }}
+        run: |
+          $pkg = Get-ChildItem "output\*.nupkg" | Select-Object -First 1
+
+          uipcli package deploy `
+            "$($pkg.FullName)" `
+            "https://cloud.uipath.com/" `
+            "" `
+            -A "$env:UIPATH_ORGANIZATION" `
+            -I "$env:UIPATH_CLIENT_ID" `
+            -S "$env:UIPATH_CLIENT_SECRET" `
+            -o "$env:UIPATH_FOLDER_PROD" `
+            --createProcess true `
+            --entryPointsPath "Main.xaml" `
+            --traceLevel Information
