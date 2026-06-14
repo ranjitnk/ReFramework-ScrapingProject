@@ -97,6 +97,7 @@ jobs:
           UIPATH_CLIENT_ID: ${{ secrets.UIPATH_CLIENT_ID }}
           UIPATH_CLIENT_SECRET: ${{ secrets.UIPATH_CLIENT_SECRET }}
           UIPATH_ORGANIZATION: ${{ secrets.UIPATH_ORGANIZATION }}
+          UIPATH_TENANT: ${{ secrets.UIPATH_TENANT }}
           UIPATH_FOLDER_PROD: ${{ secrets.UIPATH_FOLDER_PROD }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:UIPATH_CLIENT_ID)) { throw "UIPATH_CLIENT_ID is empty" }
@@ -119,6 +120,7 @@ jobs:
           UIPATH_CLIENT_ID: ${{ secrets.UIPATH_CLIENT_ID }}
           UIPATH_CLIENT_SECRET: ${{ secrets.UIPATH_CLIENT_SECRET }}
           UIPATH_ORGANIZATION: ${{ secrets.UIPATH_ORGANIZATION }}
+          UIPATH_TENANT: ${{ secrets.UIPATH_TENANT }}
           UIPATH_FOLDER_PROD: ${{ secrets.UIPATH_FOLDER_PROD }}
         run: |
           $pkg = Get-ChildItem "output\*.nupkg" | Select-Object -First 1
@@ -126,7 +128,7 @@ jobs:
           uipcli package deploy `
             "$($pkg.FullName)" `
             "https://cloud.uipath.com/" `
-            "" `
+            "$env:UIPATH_TENANT" `
             -A "$env:UIPATH_ORGANIZATION" `
             -I "$env:UIPATH_CLIENT_ID" `
             -S "$env:UIPATH_CLIENT_SECRET" `
