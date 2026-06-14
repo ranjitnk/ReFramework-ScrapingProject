@@ -22,7 +22,7 @@ jobs:
 
       - name: Install UiPath CLI
         shell: pwsh
-        run: |
+        run: |  
           dotnet tool install -g UiPath.CLI.Windows --source https://nuget.uipath.com/api/v3/index.json
 
       - name: Verify UiPath CLI
